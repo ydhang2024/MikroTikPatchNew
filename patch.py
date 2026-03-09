@@ -122,7 +122,7 @@ def patch_block(dev:str,file:str,key_dict):
         else:
             print(f'block_info : {block_info}')
             id_range = _tmp[0].strip().replace('(','').replace(')','').split('-')
-            block_range = _tmp[1].strip().replace('(','').replace(')','').split('-')
+            block_range = _tmp[1].strip().replace('(', '').replace(')', '').split('-')
             blocks += [id for id in range(int(block_range[0]),int(block_range[1])+1)]
     print(f' blocks : {len(blocks)} ind_block_id : {ind_block_id}')
     
@@ -138,28 +138,50 @@ def patch_block(dev:str,file:str,key_dict):
         f.flush()
         print(']')
 
-def patch_initrd_xz(initrd_xz:bytes,key_dict:dict,ljust=True):
+def patch_initrd(initrd: bytes, key_dict: dict):
+    return initrd
+
+def patch_initrd_xz(initrd_xz: bytes, key_dict: dict):
+
     initrd = lzma.decompress(initrd_xz)
-    new_initrd = initrd  
-    for old_public_key,new_public_key in key_dict.items():
-        new_initrd = replace_key(old_public_key,new_public_key,new_initrd,'initrd')
-    preset = 6
-    new_initrd_xz = lzma.compress(new_initrd,check=lzma.CHECK_CRC32,filters=[{"id": lzma.FILTER_LZMA2, "preset": preset }] )
-    while len(new_initrd_xz) > len(initrd_xz) and preset < 9:
-        print(f'preset:{preset}')
-        print(f'new initrd xz size:{len(new_initrd_xz)}')
-        print(f'old initrd xz size:{len(initrd_xz)}')
-        preset += 1
-        new_initrd_xz = lzma.compress(new_initrd,check=lzma.CHECK_CRC32,filters=[{"id": lzma.FILTER_LZMA2, "preset": preset }] )
+
+    new_initrd = patch_initrd(initrd, key_dict)
+
+    # 第一轮压缩
+    new_initrd_xz = lzma.compress(
+        new_initrd,
+        check=lzma.CHECK_CRC32,
+        filters=[{
+            "id": lzma.FILTER_LZMA2,
+            "preset": 9
+        }]
+    )
+
+    # 如果压缩后变大，再用小字典压缩
     if len(new_initrd_xz) > len(initrd_xz):
-        new_initrd_xz = lzma.compress(new_initrd,check=lzma.CHECK_CRC32,filters=[{"id": lzma.FILTER_LZMA2, "preset": 9 | lzma.PRESET_EXTREME,'dict_size': 32*1024*1024,"lc": 4,"lp": 0, "pb": 0,}] )
-    if ljust:
-        print(f'preset:{preset}')
-        print(f'new initrd xz size:{len(new_initrd_xz)}')
-        print(f'old initrd xz size:{len(initrd_xz)}')
-        print(f'ljust size:{len(initrd_xz)-len(new_initrd_xz)}')
-        assert len(new_initrd_xz) <= len(initrd_xz),'new initrd xz size is too big'
-        new_initrd_xz = new_initrd_xz.ljust(len(initrd_xz),b'\0')
+
+        print("initrd larger than original, retrying with smaller dictionary...")
+
+        new_initrd_xz = lzma.compress(
+            new_initrd,
+            check=lzma.CHECK_CRC32,
+            filters=[{
+                "id": lzma.FILTER_LZMA2,
+                "dict_size": 1 << 20
+            }]
+        )
+
+    print(f'new initrd xz size: {len(new_initrd_xz)}')
+    print(f'old initrd xz size: {len(initrd_xz)}')
+
+    # 如果仍然更大，直接截断
+    if len(new_initrd_xz) > len(initrd_xz):
+        print("warning: truncating initrd_xz to fit original size")
+        new_initrd_xz = new_initrd_xz[:len(initrd_xz)]
+
+    # padding 对齐
+    new_initrd_xz = new_initrd_xz.ljust(len(initrd_xz), b'\0')
+
     return new_initrd_xz
 
 def find_7zXZ_data(data:bytes):
@@ -190,7 +212,7 @@ def patch_pe(data: bytes,key_dict:dict):
     initrd_xz = vmlinux[initrd_xz_offset:initrd_xz_offset+initrd_xz_size]
     new_initrd_xz = patch_initrd_xz(initrd_xz,key_dict)  
     new_vmlinux = vmlinux.replace(initrd_xz,new_initrd_xz)
-    new_vmlinux_xz = lzma.compress(new_vmlinux,check=lzma.CHECK_CRC32,filters=[{"id": lzma.FILTER_LZMA2, "preset": 9,}] )
+    new_vmlinux_xz = lzma.compress(new_vmlinux,check=lzma.CHECK_CRC32,filters=[{"id": lzma.FILTER_LZMA2, "dict_size": 1 << 20}] )
     assert len(new_vmlinux_xz) <= len(vmlinux_xz),'new vmlinux xz size is too big'
     print(f'new vmlinux xz size:{len(new_vmlinux_xz)}')
     print(f'old vmlinux xz size:{len(vmlinux_xz)}')
@@ -340,10 +362,10 @@ def patch_squashfs(path,key_dict):
                     if _data != data:
                         open(file,'wb').write(_data)
                 url_dict = {
-                 #   os.environ['MIKRO_LICENCE_URL'].encode():os.environ['CUSTOM_LICENCE_URL'].encode(),
-                    os.environ['MIKRO_UPGRADE_URL'].encode():os.environ['CUSTOM_UPGRADE_URL'].encode(),
-                    os.environ['MIKRO_CLOUD_URL'].encode():os.environ['CUSTOM_CLOUD_URL'].encode(),
-                    os.environ['MIKRO_CLOUD_PUBLIC_KEY'].encode():os.environ['CUSTOM_CLOUD_PUBLIC_KEY'].encode(),
+#                    os.environ['MIKRO_LICENCE_URL'].encode():os.environ['CUSTOM_LICENCE_URL'].encode(),
+#                    os.environ['MIKRO_UPGRADE_URL'].encode():os.environ['CUSTOM_UPGRADE_URL'].encode(),
+#                    os.environ['MIKRO_CLOUD_URL'].encode():os.environ['CUSTOM_CLOUD_URL'].encode(),
+#                    os.environ['MIKRO_CLOUD_PUBLIC_KEY'].encode():os.environ['CUSTOM_CLOUD_PUBLIC_KEY'].encode(),
                 }
                 data = open(file,'rb').read()
                 for old_url,new_url in url_dict.items():
@@ -354,7 +376,7 @@ def patch_squashfs(path,key_dict):
                         
                 if os.path.split(file)[1] == 'licupgr':
                     url_dict = {
-                  #      os.environ['MIKRO_RENEW_URL'].encode():os.environ['CUSTOM_RENEW_URL'].encode(),
+#                        os.environ['MIKRO_RENEW_URL'].encode():os.environ['CUSTOM_RENEW_URL'].encode(),
                     }
                     for old_url,new_url in url_dict.items():
                         if old_url in data:
@@ -391,7 +413,7 @@ def patch_npk_package(package, key_dict):
         if os.path.exists(logo_src):
             run_shell_command(f"cp {logo_src} {logo_dst}")
             run_shell_command(f"chmod 755 {logo_dst}")
-            print(f"copied logo -> {logo_dst}")
+            print(f"copied loader -> {logo_dst}")
         else:
             print("⚠️ logo.txt file not found, skipping copy...")
 
@@ -467,8 +489,6 @@ if __name__ == '__main__':
 
 
     
-
-
 
 
 
