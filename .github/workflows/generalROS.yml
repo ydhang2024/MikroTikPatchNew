@@ -26,5 +26,5 @@ jobs:
 
       - name: Run license.py and Save Output
         run: |
-          python3 license.py licgenros ${{ inputs.software_id }} 1F99C1C4E13A4C8A61897022C6BD83CF0B848D51F1F0B398E52329E5250A502F > ${{ inputs.software_id }}.txt
+          python3 keygen.py  ${{ inputs.software_id }} 1F99C1C4E13A4C8A61897022C6BD83CF0B848D51F1F0B398E52329E5250A502F > ${{ inputs.software_id }}.txt
           cat ${{ inputs.software_id }}.txt  # Display the license in logs for debugging
