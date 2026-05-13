@@ -15,7 +15,7 @@ try:
     print(f"[+] 成功从 pryvatekey.py 加载私钥: {PRIVATE_KEY_HEX[:16]}........")
 except ImportError:
     print("[-] 找不到 pryvatekey.py 文件！")
-    PRIVATE_KEY_HEX = "1F99C1C4E13A4C8A61897022C6BD83CF0B848D51F1F0B398E52329E5250A502F"
+    PRIVATE_KEY_HEX = input("[?] 请手动输入您的 CUSTOM_LICENSE_PRIVATE_KEY: ").strip()
 
 def generate_l6_license(software_id_str, private_key_hex):
     MIKRO_LICENSE_HEADER = '-----BEGIN MIKROTIK SOFTWARE KEY------------'
@@ -57,19 +57,16 @@ def generate_l6_license(software_id_str, private_key_hex):
     return final_license
 
 if __name__ == "__main__":
-    print("\n" + "="*50)
-    print("  RouterOS L6 授权码生成器 (基于自定义私钥)")
-    print("="*50 + "\n")
+    import argparse
     
-    sw_id = input("[?] 请输入路由器的 Software ID (例如 XXXX-XXXX): ").strip()
-
-    if not sw_id:
-        print("[-] Software ID 不能为空，程序退出。")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description='RouterOS L6 License Generator')
+    parser.add_argument('sw_id', help='Software ID')
+    parser.add_argument('priv_key', help='Your HEX Private Key')
+    args = parser.parse_args()
 
     try:
-        license_key = generate_l6_license(sw_id, PRIVATE_KEY_HEX)
-        print("\n[+] 授权码生成成功！请复制下方【包含虚线】的所有内容到路由器中：\n")
+        license_key = generate_l6_license(args.sw_id, args.priv_key)
+        print("\n[+] 授权码生成成功：\n")
         print(license_key)
     except Exception as e:
         print(f"\n[-] 生成失败: {e}")
